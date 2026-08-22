@@ -1,0 +1,9 @@
+{
+  "extends": "gts/tsconfig-google.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "types": ["node", "vscode"]
+  },
+  "include": ["src/**/*.ts"]
+}
