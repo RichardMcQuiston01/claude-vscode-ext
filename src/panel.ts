@@ -245,7 +245,13 @@ async function handleWebviewMessage(
       reply = await handleSave(context, message.target, message.values);
       break;
   }
-  await panel.webview.postMessage(reply);
+  // Each branch above awaits async work (a fetch, file I/O); the panel may
+  // have been closed while it was in flight. Posting to a disposed webview
+  // throws, so check it's still the active one rather than let that
+  // surface as a confusing "failed to load/save settings" error.
+  if (panel === currentPanel) {
+    await panel.webview.postMessage(reply);
+  }
 }
 
 /**
@@ -312,17 +318,31 @@ export async function openSettingsBuilderPanel(
 export async function refreshSchema(context: ExtensionContext): Promise<void> {
   const vscode = await import('vscode');
 
+  // Captured before the awaits below so a dispose that happens while this
+  // is in flight is detected by comparing against the (then-updated)
+  // module state, rather than by this function's own local state going
+  // stale silently.
+  const panel = currentPanel;
+  const target = currentTarget;
+
   cachedSchemaResult = undefined;
 
-  if (!currentPanel || !currentTarget) {
+  if (!panel || !target) {
     void vscode.window.showInformationMessage(
       'Open Claude Settings Builder before refreshing its schema.',
     );
     return;
   }
 
-  const reply = await loadTargetMessage(context, currentTarget);
-  await currentPanel.webview.postMessage(reply);
+  const reply = await loadTargetMessage(context, target);
+
+  if (panel !== currentPanel) {
+    // The panel was closed (or replaced by a new one) while the refresh
+    // was in flight; there's nothing left to post the result to or show a
+    // notification about.
+    return;
+  }
+  await panel.webview.postMessage(reply);
 
   if (reply.type === 'loadError') {
     void vscode.window.showErrorMessage(
