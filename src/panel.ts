@@ -51,6 +51,10 @@ let currentPanel: WebviewPanel | undefined;
 // re-fetch (or re-read the bundled fallback for) the schema every time;
 // cleared when the panel is disposed so a fresh session gets a fresh copy.
 let cachedSchemaResult: {schema: JsonSchema; warning?: string} | undefined;
+// The target the webview is currently viewing (or last asked to view),
+// tracked purely so the "Refresh Schema" command has something to reload
+// after invalidating the cache above.
+let currentTarget: SettingsTarget | undefined;
 
 /**
  * Rewrites the built webview-ui `index.html` so its relative asset
@@ -137,10 +141,15 @@ async function ensureSchema(
   return cachedSchemaResult;
 }
 
+type LoadResultMessage = Extract<
+  HostToWebviewMessage,
+  {type: 'loadSettings'} | {type: 'loadError'}
+>;
+
 async function loadTargetMessage(
   context: ExtensionContext,
   target: SettingsTarget,
-): Promise<HostToWebviewMessage> {
+): Promise<LoadResultMessage> {
   const workspaceFolderUri = await getWorkspaceFolderUri();
   const availableTargets = getAvailableTargets(workspaceFolderUri);
 
@@ -224,13 +233,12 @@ async function handleWebviewMessage(
       const availableTargets = getAvailableTargets(
         await getWorkspaceFolderUri(),
       );
-      reply = await loadTargetMessage(
-        context,
-        getDefaultTarget(availableTargets),
-      );
+      currentTarget = getDefaultTarget(availableTargets);
+      reply = await loadTargetMessage(context, currentTarget);
       break;
     }
     case 'selectTarget':
+      currentTarget = message.target;
       reply = await loadTargetMessage(context, message.target);
       break;
     case 'save':
@@ -284,10 +292,47 @@ export async function openSettingsBuilderPanel(
     () => {
       currentPanel = undefined;
       cachedSchemaResult = undefined;
+      currentTarget = undefined;
     },
     undefined,
     context.subscriptions,
   );
 
   currentPanel = panel;
+}
+
+/**
+ * Retries the live schema fetch, bypassing the cached copy from this panel
+ * session, and reloads the currently-viewed target with the result. This
+ * is the "manual refresh" escape hatch for offline resilience: a session
+ * that started offline (and is therefore showing the bundled fallback
+ * schema with its staleness warning) can retry once connectivity is back,
+ * without closing and reopening the panel.
+ */
+export async function refreshSchema(context: ExtensionContext): Promise<void> {
+  const vscode = await import('vscode');
+
+  cachedSchemaResult = undefined;
+
+  if (!currentPanel || !currentTarget) {
+    void vscode.window.showInformationMessage(
+      'Open Claude Settings Builder before refreshing its schema.',
+    );
+    return;
+  }
+
+  const reply = await loadTargetMessage(context, currentTarget);
+  await currentPanel.webview.postMessage(reply);
+
+  if (reply.type === 'loadError') {
+    void vscode.window.showErrorMessage(
+      `Failed to refresh the Claude Code settings schema: ${reply.message}`,
+    );
+  } else if (reply.warning) {
+    void vscode.window.showWarningMessage(reply.warning);
+  } else {
+    void vscode.window.showInformationMessage(
+      'Refreshed the Claude Code settings schema from schemastore.org.',
+    );
+  }
 }
