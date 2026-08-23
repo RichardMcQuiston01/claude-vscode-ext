@@ -1,35 +1,56 @@
 import type {ExtensionContext, Uri, Webview, WebviewPanel} from 'vscode';
 import {loadSettingsSchema, type JsonSchema} from './schemaProvider.js';
+import {
+  readSettingsFile,
+  resolveSettingsFileUri,
+  writeSettingsFile,
+  type SettingsTarget,
+} from './settingsFile.js';
 
 type JsonObject = Record<string, unknown>;
 
 /**
- * Messages sent from the webview to the extension host. Extended in Stage
- * 5 to carry the actual "save" action — kept to just the initial handshake
- * here since there's no save flow yet.
+ * Messages sent from the webview to the extension host.
  *
  * Mirrored (not imported) in `webview-ui/src/App.tsx`: the extension host
  * and webview-ui are separate TypeScript projects with their own tsconfigs,
  * so sharing this literal type isn't worth the cross-project build wiring
  * yet. Keep the two in sync by hand; revisit if the protocol grows.
  */
-export type WebviewToHostMessage = {type: 'ready'};
+export type WebviewToHostMessage =
+  | {type: 'ready'}
+  | {type: 'selectTarget'; target: SettingsTarget}
+  | {type: 'save'; target: SettingsTarget; values: JsonObject};
 
 /** Messages sent from the extension host to the webview. See above. */
 export type HostToWebviewMessage =
   | {
       type: 'loadSettings';
       schema: JsonSchema;
+      target: SettingsTarget;
+      availableTargets: SettingsTarget[];
       values: JsonObject;
       warning?: string;
     }
-  | {type: 'loadError'; message: string};
+  | {type: 'loadError'; message: string}
+  | {type: 'saveResult'; target: SettingsTarget; ok: true}
+  | {type: 'saveResult'; target: SettingsTarget; ok: false; error: string};
+
+const ALL_TARGETS: SettingsTarget[] = [
+  'workspaceSettings',
+  'workspaceLocalSettings',
+  'userSettings',
+];
 
 const VIEW_TYPE = 'claudeSettingsBuilder.panel';
 const PANEL_TITLE = 'Claude Settings Builder';
 const WEBVIEW_DIST_PATH = ['dist', 'webview'];
 
 let currentPanel: WebviewPanel | undefined;
+// Cached for the life of one panel session so switching targets doesn't
+// re-fetch (or re-read the bundled fallback for) the schema every time;
+// cleared when the panel is disposed so a fresh session gets a fresh copy.
+let cachedSchemaResult: {schema: JsonSchema; warning?: string} | undefined;
 
 /**
  * Rewrites the built webview-ui `index.html` so its relative asset
@@ -82,26 +103,139 @@ async function getWebviewHtml(
   });
 }
 
+async function getWorkspaceFolderUri(): Promise<Uri | undefined> {
+  const vscode = await import('vscode');
+  return vscode.workspace.workspaceFolders?.[0]?.uri;
+}
+
+/**
+ * The two workspace-scoped targets need an open workspace folder;
+ * `userSettings` never does. Reflecting that here (rather than always
+ * offering all three and failing on save) is what makes the three-target
+ * picker in the webview honest about what's actually available.
+ */
+export function getAvailableTargets(
+  workspaceFolderUri: Uri | undefined,
+): SettingsTarget[] {
+  return workspaceFolderUri
+    ? ALL_TARGETS
+    : ALL_TARGETS.filter(target => target === 'userSettings');
+}
+
+export function getDefaultTarget(
+  availableTargets: SettingsTarget[],
+): SettingsTarget {
+  return availableTargets.includes('workspaceSettings')
+    ? 'workspaceSettings'
+    : 'userSettings';
+}
+
+async function ensureSchema(
+  context: ExtensionContext,
+): Promise<{schema: JsonSchema; warning?: string}> {
+  cachedSchemaResult ??= await loadSettingsSchema(context);
+  return cachedSchemaResult;
+}
+
+async function loadTargetMessage(
+  context: ExtensionContext,
+  target: SettingsTarget,
+): Promise<HostToWebviewMessage> {
+  const workspaceFolderUri = await getWorkspaceFolderUri();
+  const availableTargets = getAvailableTargets(workspaceFolderUri);
+
+  const uriResult = await resolveSettingsFileUri(target, workspaceFolderUri);
+  if (!uriResult.ok) {
+    return {type: 'loadError', message: uriResult.error};
+  }
+
+  const readResult = await readSettingsFile(uriResult.value);
+  if (!readResult.ok) {
+    return {type: 'loadError', message: readResult.error};
+  }
+
+  try {
+    const {schema, warning} = await ensureSchema(context);
+    return {
+      type: 'loadSettings',
+      schema,
+      target,
+      availableTargets,
+      values: readResult.value,
+      warning,
+    };
+  } catch (error) {
+    return {
+      type: 'loadError',
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function handleSave(
+  context: ExtensionContext,
+  target: SettingsTarget,
+  values: JsonObject,
+): Promise<HostToWebviewMessage> {
+  const vscode = await import('vscode');
+
+  const workspaceFolderUri = await getWorkspaceFolderUri();
+  const uriResult = await resolveSettingsFileUri(target, workspaceFolderUri);
+  if (!uriResult.ok) {
+    void vscode.window.showErrorMessage(
+      `Failed to save Claude Code settings: ${uriResult.error}`,
+    );
+    return {type: 'saveResult', target, ok: false, error: uriResult.error};
+  }
+
+  let schema: JsonSchema;
+  try {
+    ({schema} = await ensureSchema(context));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    void vscode.window.showErrorMessage(
+      `Failed to save Claude Code settings: ${message}`,
+    );
+    return {type: 'saveResult', target, ok: false, error: message};
+  }
+
+  const writeResult = await writeSettingsFile(uriResult.value, schema, values);
+  if (!writeResult.ok) {
+    void vscode.window.showErrorMessage(
+      `Failed to save Claude Code settings: ${writeResult.error}`,
+    );
+    return {type: 'saveResult', target, ok: false, error: writeResult.error};
+  }
+
+  void vscode.window.showInformationMessage(
+    `Saved Claude Code settings to ${uriResult.value.fsPath}`,
+  );
+  return {type: 'saveResult', target, ok: true};
+}
+
 async function handleWebviewMessage(
   context: ExtensionContext,
   panel: WebviewPanel,
   message: WebviewToHostMessage,
 ): Promise<void> {
-  if (message.type !== 'ready') {
-    return;
-  }
-
   let reply: HostToWebviewMessage;
-  try {
-    const {schema, warning} = await loadSettingsSchema(context);
-    // The webview only renders the loaded schema; wiring in the current
-    // file's real values and the three-target picker is Stage 5.
-    reply = {type: 'loadSettings', schema, values: {}, warning};
-  } catch (error) {
-    reply = {
-      type: 'loadError',
-      message: error instanceof Error ? error.message : String(error),
-    };
+  switch (message.type) {
+    case 'ready': {
+      const availableTargets = getAvailableTargets(
+        await getWorkspaceFolderUri(),
+      );
+      reply = await loadTargetMessage(
+        context,
+        getDefaultTarget(availableTargets),
+      );
+      break;
+    }
+    case 'selectTarget':
+      reply = await loadTargetMessage(context, message.target);
+      break;
+    case 'save':
+      reply = await handleSave(context, message.target, message.values);
+      break;
   }
   await panel.webview.postMessage(reply);
 }
@@ -149,6 +283,7 @@ export async function openSettingsBuilderPanel(
   panel.onDidDispose(
     () => {
       currentPanel = undefined;
+      cachedSchemaResult = undefined;
     },
     undefined,
     context.subscriptions,
