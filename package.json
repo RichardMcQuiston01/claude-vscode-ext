@@ -36,6 +36,10 @@
     "test": "node --import tsx --test \"src/**/*.test.ts\"",
     "vscode:prepublish": "npm run build"
   },
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1"
+  },
   "devDependencies": {
     "@types/node": "^26.2.0",
     "@types/vscode": "^1.134.0",
