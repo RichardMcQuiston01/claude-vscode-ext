@@ -1,9 +1,12 @@
 import type {ExtensionContext, Uri, Webview, WebviewPanel} from 'vscode';
+import {loadSettingsSchema, type JsonSchema} from './schemaProvider.js';
+
+type JsonObject = Record<string, unknown>;
 
 /**
- * Messages sent from the webview to the extension host. Extended in later
- * stages (Stage 4 wires the form to this protocol; Stage 5 adds the real
- * load/save payloads) — kept minimal here to just prove the round trip.
+ * Messages sent from the webview to the extension host. Extended in Stage
+ * 5 to carry the actual "save" action — kept to just the initial handshake
+ * here since there's no save flow yet.
  *
  * Mirrored (not imported) in `webview-ui/src/App.tsx`: the extension host
  * and webview-ui are separate TypeScript projects with their own tsconfigs,
@@ -13,7 +16,14 @@ import type {ExtensionContext, Uri, Webview, WebviewPanel} from 'vscode';
 export type WebviewToHostMessage = {type: 'ready'};
 
 /** Messages sent from the extension host to the webview. See above. */
-export type HostToWebviewMessage = {type: 'init'};
+export type HostToWebviewMessage =
+  | {
+      type: 'loadSettings';
+      schema: JsonSchema;
+      values: JsonObject;
+      warning?: string;
+    }
+  | {type: 'loadError'; message: string};
 
 const VIEW_TYPE = 'claudeSettingsBuilder.panel';
 const PANEL_TITLE = 'Claude Settings Builder';
@@ -72,14 +82,28 @@ async function getWebviewHtml(
   });
 }
 
-function handleWebviewMessage(
+async function handleWebviewMessage(
+  context: ExtensionContext,
   panel: WebviewPanel,
   message: WebviewToHostMessage,
-): void {
-  if (message.type === 'ready') {
-    const reply: HostToWebviewMessage = {type: 'init'};
-    void panel.webview.postMessage(reply);
+): Promise<void> {
+  if (message.type !== 'ready') {
+    return;
   }
+
+  let reply: HostToWebviewMessage;
+  try {
+    const {schema, warning} = await loadSettingsSchema(context);
+    // The webview only renders the loaded schema; wiring in the current
+    // file's real values and the three-target picker is Stage 5.
+    reply = {type: 'loadSettings', schema, values: {}, warning};
+  } catch (error) {
+    reply = {
+      type: 'loadError',
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+  await panel.webview.postMessage(reply);
 }
 
 /**
@@ -115,7 +139,9 @@ export async function openSettingsBuilderPanel(
   panel.webview.html = await getWebviewHtml(panel.webview, webviewRoot);
 
   panel.webview.onDidReceiveMessage(
-    (message: WebviewToHostMessage) => handleWebviewMessage(panel, message),
+    (message: WebviewToHostMessage) => {
+      void handleWebviewMessage(context, panel, message);
+    },
     undefined,
     context.subscriptions,
   );

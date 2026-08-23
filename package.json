@@ -33,7 +33,9 @@
     "lint": "npm run lint:extension && npm run lint:webview",
     "lint:extension": "eslint \"src/**/*.ts\"",
     "lint:webview": "npm run lint --prefix webview-ui",
-    "test": "node --import tsx --test \"src/**/*.test.ts\"",
+    "test": "npm run test:extension && npm run test:webview",
+    "test:extension": "node --import tsx --test \"src/**/*.test.ts\"",
+    "test:webview": "npm run test --prefix webview-ui",
     "vscode:prepublish": "npm run build"
   },
   "dependencies": {
