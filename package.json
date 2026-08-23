@@ -19,6 +19,10 @@
       {
         "command": "claudeSettingsBuilder.open",
         "title": "Claude Settings Builder: Open"
+      },
+      {
+        "command": "claudeSettingsBuilder.refreshSchema",
+        "title": "Claude Settings Builder: Refresh Schema"
       }
     ]
   },

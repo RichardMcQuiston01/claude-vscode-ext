@@ -1,6 +1,20 @@
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import path from 'node:path';
 import {test} from 'node:test';
 import {resolveSettingsSchema} from './schemaProvider.js';
+
+const BUNDLED_SCHEMA_PATH = path.join(
+  process.cwd(),
+  'schema',
+  'claude-code-settings.fallback.json',
+);
+
+function alwaysOfflineFetch(): typeof fetch {
+  return (async () => {
+    throw new Error('network unreachable');
+  }) as unknown as typeof fetch;
+}
 
 function jsonResponse(
   body: unknown,
@@ -85,4 +99,37 @@ void test('resolveSettingsSchema throws a specific error when the bundled schema
     resolveSettingsSchema(fetchImpl, readBundledSchemaText),
     /not valid JSON/,
   );
+});
+
+void test('a fully offline session loads the real bundled schema with a staleness warning', async () => {
+  const readBundledSchemaText = async () =>
+    readFileSync(BUNDLED_SCHEMA_PATH, 'utf8');
+
+  const result = await resolveSettingsSchema(
+    alwaysOfflineFetch(),
+    readBundledSchemaText,
+  );
+
+  assert.equal(result.source, 'bundled');
+  assert.equal(result.schema.type, 'object');
+  assert.ok(
+    result.schema.properties && typeof result.schema.properties === 'object',
+    'bundled schema should have a properties map',
+  );
+  assert.match(result.warning ?? '', /may be stale/);
+});
+
+void test('every attempt during a fully offline session falls back correctly, not just the first', async () => {
+  const bundledSchema = {title: 'bundled-schema'};
+  const readBundledSchemaText = async () => JSON.stringify(bundledSchema);
+  const fetchImpl = alwaysOfflineFetch();
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const result = await resolveSettingsSchema(
+      fetchImpl,
+      readBundledSchemaText,
+    );
+    assert.equal(result.source, 'bundled');
+    assert.deepEqual(result.schema, bundledSchema);
+  }
 });
