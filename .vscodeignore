@@ -1,0 +1,21 @@
+.github/**
+.vscode-test/**
+node_modules/**
+webview-ui/**
+src/**
+*.tsbuildinfo
+# bundle:extension inlines panel/schemaProvider/settingsFile (and ajv) into
+# dist/extension.js; tsc's unbundled per-file output and .d.ts/.map files
+# are only useful for `npm run watch` during development, not for the
+# packaged extension.
+dist/*.d.ts
+dist/*.js.map
+dist/panel.js
+dist/schemaProvider.js
+dist/settingsFile.js
+tsconfig*.json
+eslint.config.js
+.prettierrc.json
+.gitignore
+CLAUDE.md
+ROADMAP.md
