@@ -72,12 +72,68 @@ describe('classifyField', () => {
     ).toEqual({kind: 'unsupported'});
   });
 
-  test('treats oneOf/anyOf/allOf as unsupported', () => {
+  test('treats a mixed-type oneOf/anyOf as unsupported', () => {
     expect(
       classifyField({oneOf: [{type: 'string'}, {type: 'number'}]}, ROOT),
     ).toEqual({kind: 'unsupported'});
     expect(
       classifyField({anyOf: [{type: 'string'}, {type: 'number'}]}, ROOT),
+    ).toEqual({kind: 'unsupported'});
+  });
+
+  test('treats allOf as unsupported', () => {
+    expect(
+      classifyField({allOf: [{type: 'string'}, {minLength: 1}]}, ROOT),
+    ).toEqual({kind: 'unsupported'});
+  });
+
+  test('merges an anyOf of two enum strings into a single enum, no free text', () => {
+    expect(
+      classifyField(
+        {
+          anyOf: [
+            {type: 'string', enum: ['a', 'b']},
+            {type: 'string', enum: ['b', 'c']},
+          ],
+        },
+        ROOT,
+      ),
+    ).toEqual({kind: 'string', enumValues: ['a', 'b', 'c']});
+  });
+
+  test('classifies an anyOf of an enum plus a pattern-matched string as a string with suggestions and free text allowed (theme-shaped)', () => {
+    expect(
+      classifyField(
+        {
+          anyOf: [
+            {type: 'string', enum: ['auto', 'dark', 'light']},
+            {type: 'string', pattern: '^custom:.+'},
+          ],
+        },
+        ROOT,
+      ),
+    ).toEqual({
+      kind: 'string',
+      enumValues: ['auto', 'dark', 'light'],
+      allowCustom: true,
+    });
+  });
+
+  test('resolves $refs within an anyOf before classifying its branches', () => {
+    expect(
+      classifyField(
+        {oneOf: [{$ref: '#/$defs/permissionRule'}, {type: 'string', enum: ['x']}]},
+        ROOT,
+      ),
+    ).toEqual({kind: 'string', enumValues: ['x'], allowCustom: true});
+  });
+
+  test('treats an anyOf with a non-string branch as unsupported', () => {
+    expect(
+      classifyField(
+        {anyOf: [{type: 'string', enum: ['a']}, {type: 'object'}]},
+        ROOT,
+      ),
     ).toEqual({kind: 'unsupported'});
   });
 
