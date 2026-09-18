@@ -76,9 +76,18 @@ Produces a `claude-settings-builder-<version>.vsix` file you can install
 locally via VS Code's **Extensions: Install from VSIX...** command, or
 `code --install-extension claude-settings-builder-<version>.vsix`.
 
-> Screenshots of the three-target picker and the schema-driven form are
-> not yet included in this README — add them here once you've captured
-> them from a running Extension Development Host.
+## Screenshots
+
+The schema-driven form, showing `permissions`' nested `allow`/`deny`/`ask`
+rule lists alongside the three-target picker:
+
+![The schema-driven form, showing the permissions field with allow, deny, and ask rule lists, and the target picker set to Workspace Settings](./images/screenshot-schema-form.png)
+
+The `theme` field — an enum of presets plus room for a custom value —
+rendered as a real text input with autocomplete suggestions instead of
+falling back to raw JSON:
+
+![The theme field showing a text input with the value "dark"](./images/screenshot-theme-field.png)
 
 ## License
 
