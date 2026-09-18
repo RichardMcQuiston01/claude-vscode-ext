@@ -5,6 +5,7 @@
   "version": "0.0.1",
   "publisher": "richardmcquiston01",
   "private": true,
+  "icon": "images/icon.png",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
