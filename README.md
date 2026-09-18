@@ -14,7 +14,9 @@ instead of hand-written JSON.
   setting from the live [Claude Code settings
   schema](https://json.schemastore.org/claude-code-settings.json) (env
   vars, permissions, hooks, MCP server toggles, and more), each with its
-  own description shown inline.
+  own description shown inline. Settings with a fixed set of presets plus
+  room for a custom value (like `theme`) get autocomplete suggestions
+  instead of a locked-down dropdown or raw JSON.
 - **Three-target awareness** — an explicit picker always shows which file
   you're editing (workspace settings, workspace local settings, or user
   settings), and disables targets that aren't available (e.g. workspace
@@ -31,7 +33,9 @@ instead of hand-written JSON.
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) 20+ and npm
+- [Node.js](https://nodejs.org/) `^22.22.2`, `^24.15.0`, or `>=26.0.0` (pinned
+  by `webview-ui`'s `jsdom` test dependency — an older Node triggers an
+  `EBADENGINE` warning at install time) and npm
 - Visual Studio Code
 
 ### Installation
@@ -83,3 +87,11 @@ Apache 2
 ## Copyright
 
 (c)2026 Richard McQuiston. All rights reserved.
+
+## Buy Me a Coffee
+
+If this app, code, or repository has helped you or someone you know, please consider donating. I appreciate any help to offset the costs of development and/or AI Credits.
+
+[**Donate via Stripe**](https://donate.stripe.com/00w5kD3Gj1Xo9v7gVOcs800), or scan:
+
+[![Donate via Stripe](./donate.png)](https://donate.stripe.com/00w5kD3Gj1Xo9v7gVOcs800)
