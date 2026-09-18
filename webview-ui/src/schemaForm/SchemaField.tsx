@@ -47,6 +47,7 @@ export function SchemaField({name, schema, root, value, onChange}: SchemaFieldPr
           description={description}
           value={typeof value === 'string' ? value : ''}
           enumValues={kind.enumValues}
+          allowCustom={kind.allowCustom}
           onChange={onChange}
         />
       );
