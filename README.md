@@ -80,6 +80,20 @@ Produces a `claude-settings-builder-<version>.vsix` file you can install
 locally via VS Code's **Extensions: Install from VSIX...** command, or
 `code --install-extension claude-settings-builder-<version>.vsix`.
 
+### Releasing
+
+Pushing a `v<version>` tag (e.g. `v0.0.2`) publishes that version to the
+Marketplace automatically, via `.github/workflows/publish.yml`:
+
+```sh
+npm version patch   # or minor / major -- bumps package.json and commits
+git push && git push --tags
+```
+
+The workflow lints, tests, checks that the tag matches `package.json`'s
+`version` (so a stale local checkout can't publish the wrong build), and
+then runs `vsce publish` using the repository's `VSCE_PAT` secret.
+
 ## Screenshots
 
 The schema-driven form, showing `permissions`' nested `allow`/`deny`/`ask`
