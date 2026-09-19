@@ -1,5 +1,9 @@
 # Claude Settings Builder
 
+[![Visual Studio Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/richardmcquiston01.claude-settings-builder)](https://marketplace.visualstudio.com/items?itemName=richardmcquiston01.claude-settings-builder)
+[![Visual Studio Marketplace Installs](https://img.shields.io/visual-studio-marketplace/i/richardmcquiston01.claude-settings-builder)](https://marketplace.visualstudio.com/items?itemName=richardmcquiston01.claude-settings-builder)
+[![Visual Studio Marketplace Rating](https://img.shields.io/visual-studio-marketplace/r/richardmcquiston01.claude-settings-builder)](https://marketplace.visualstudio.com/items?itemName=richardmcquiston01.claude-settings-builder)
+
 ## Overview
 
 A VS Code extension that provides a GUI for building and editing Claude
