@@ -72,5 +72,8 @@
     "gts": "^7.0.0",
     "tsx": "^4.23.12",
     "typescript": "^6.0.3"
+  },
+  "sponsor": {
+    "url": "https://www.paypal.com/ncp/payment/UNWQL5XZ7TLSG"
   }
 }
